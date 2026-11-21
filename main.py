@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""VELMARA — travel poster for a place that isn't there.
+"""THALVARA — travel poster for a place that isn't there.
 
 A 1024x1024 travel poster, drawn from scratch with a small pure-stdlib
 rasterizer (no PIL, no network, deterministic). The only text on the
-poster is the place name VELMARA, blitted from a bitmap atlas rendered
+poster is the place name THALVARA, blitted from a bitmap atlas rendered
 at build time from the real Bodoni Moda Bold typeface (atlas.png +
 atlas.json live next to this file).
 
 Scene: an island cliff at golden hour where the sea falls UP — a
 reversed waterfall arcs from the cliff edge into the sky and breaks
-into light. Deep teal sea, gold sun, one hero landmark, one small boat.
+into light. A small village with lit windows sits on the cliff top,
+boats cross the deep teal sea, one hero landmark, golden sun.
 """
 
 import json
@@ -176,6 +177,12 @@ class Canvas:
         self.fill_poly([(x0 + nx, y0 + ny), (x1 + nx, y1 + ny),
                         (x1 - nx, y1 - ny), (x0 - nx, y0 - ny)], c)
 
+    def hline_alpha(self, x0, x1, y, c, a):
+        if y < 0 or y >= self.h or a <= 0:
+            return
+        for x in range(max(0, x0), min(self.w - 1, x1) + 1):
+            self.blend(x, y, c, a)
+
 
 def grad_at(stops, t):
     if t <= stops[0][0]:
@@ -321,7 +328,7 @@ def encode_png_rgb(cv):
 
 # ---------------------------------------------------------------- atlas text
 def blit_word(cv, atlas_path, meta_path, target_w, cx, top, tint):
-    """Blit the VELMARA atlas, bilinearly resampled to target width,
+    """Blit the THALVARA atlas, bilinearly resampled to target width,
     tinted, centred on cx with its top at `top`."""
     aw, ah, rgba = decode_png_rgba(atlas_path)
     meta = json.load(open(meta_path))
@@ -382,12 +389,45 @@ def draw_scene(cv):
     cv.disc_alpha(sx, sy, sr + 20, GOLD_LIGHT, 0.22)
     cv.disc(sx, sy, sr, GOLD_LIGHT)
     cv.disc(sx, sy, sr - 14, (250, 226, 138))
+    # faint sun rays (kept away from the name zone above)
+    for ang in (200, 225, 250, 285, 315, 340):
+        r = math.radians(ang)
+        ex = sx + math.cos(r) * 210
+        ey = sy + math.sin(r) * 210
+        px = sx + math.cos(r + 0.06) * 96
+        py = sy + math.sin(r + 0.06) * 96
+        qx = sx + math.cos(r - 0.06) * 96
+        qy = sy + math.sin(r - 0.06) * 96
+        cv.fill_poly_alpha([(px, py), (qx, qy), (ex, ey)], GOLD_LIGHT, 0.10)
+
+    # --- faint early stars in the upper corners (golden hour fading)
+    for (stx, sty, sr_) in [(52, 44, 2), (88, 90, 1), (60, 150, 2),
+                            (956, 52, 2), (930, 110, 1), (972, 150, 2),
+                            (40, 220, 1), (984, 220, 1)]:
+        cv.disc_alpha(stx, sty, sr_, GOLD_LIGHT, 0.55)
 
     # --- sun path on the sea: gold streaks under the sun
     for i, (y, wdt, a) in enumerate([(668, 190, 0.45), (700, 230, 0.38),
                                      (740, 270, 0.32), (790, 310, 0.26),
                                      (850, 360, 0.20), (920, 410, 0.15)]):
         cv.ellipse_alpha(sx, y, wdt // 2, 5, GOLD_LIGHT, a)
+
+    # --- wave strokes on the sea (deterministic, gold + white)
+    seed = 1234567
+
+    def rnd():
+        nonlocal seed
+        seed = (1103515245 * seed + 12345) & 0x7FFFFFFF
+        return seed / 0x7FFFFFFF
+
+    for _ in range(46):
+        wx = 500 + int(rnd() * 480)
+        wy = 662 + int(rnd() * 330)
+        wl = 18 + int(rnd() * 52)
+        wa = 0.10 + rnd() * 0.16
+        wc = GOLD_LIGHT if rnd() < 0.6 else (240, 248, 244)
+        cv.hline_alpha(wx, wx + wl, wy, wc, wa)
+        cv.hline_alpha(wx, wx + wl, wy + 1, wc, wa * 0.6)
 
     # --- distant headland on the right horizon (keeps the sea from
     #     feeling empty, stays out of the hero's way)
@@ -433,6 +473,35 @@ def draw_scene(cv):
     for (sx0, sy0, sx1, sy1) in [(150, 700, 130, 960), (260, 690, 250, 1000),
                                  (360, 700, 372, 980)]:
         cv.thick_line(sx0, sy0, sx1, sy1, 3, (7, 36, 45))
+    # horizontal strata: short broken segments, never edge to edge
+    for (by, bx0, bx1) in [(760, 120, 300), (832, 210, 420), (904, 90, 260),
+                           (968, 260, 460), (800, 380, 470), (940, 150, 330)]:
+        cv.fill_poly_alpha([(bx0, by), (bx1, by), (bx1, by + 3),
+                            (bx0, by + 3)], (38, 96, 106), 0.30)
+
+    # --- tiny village on the cliff top: the promise of a stay.
+    # Silhouette houses with warm lit windows, tucked behind the palms.
+    def house(hx, hy, hw, hh):
+        cv.fill_poly([(hx, hy), (hx + hw, hy), (hx + hw, hy + hh),
+                      (hx, hy + hh)], (8, 38, 48))
+        cv.fill_poly([(hx - 3, hy), (hx + hw // 2, hy - 12),
+                      (hx + hw + 3, hy)], (6, 30, 40))
+        cv.fill_poly([(hx + 5, hy + 6), (hx + 11, hy + 6),
+                      (hx + 11, hy + 12), (hx + 5, hy + 12)], GOLD_LIGHT)
+        if hw > 30:
+            cv.fill_poly([(hx + hw - 12, hy + 6), (hx + hw - 6, hy + 6),
+                          (hx + hw - 6, hy + 12), (hx + hw - 12, hy + 12)],
+                         GOLD_LIGHT)
+
+    house(92, 622, 30, 22)
+    house(128, 626, 24, 18)
+    house(300, 618, 34, 24)
+    house(340, 622, 26, 20)
+    house(372, 624, 24, 18)
+    # one lamp post on the cliff path
+    cv.thick_line(250, 644, 250, 612, 3, (8, 38, 48))
+    cv.disc(250, 608, 5, GOLD_LIGHT)
+    cv.disc_alpha(250, 608, 12, GOLD_LIGHT, 0.25)
 
     # --- palm cluster on the cliff top (silhouette, gold-rimmed)
     def palm(tx, ty, s, lean):
@@ -466,18 +535,25 @@ def draw_scene(cv):
     bird(250, 300, 1)
     bird(310, 350, 1)
 
-    # --- small sailboat on the sea (the promise of a stay)
-    bx, by = 690, 812
-    cv.fill_poly([(bx - 34, by), (bx + 34, by), (bx + 22, by + 16),
-                  (bx - 22, by + 16)], CLIFF)
-    cv.fill_poly([(bx, by - 58), (bx, by - 2), (bx + 30, by - 2)], CREAM)
-    cv.fill_poly([(bx - 2, by - 46), (bx - 2, by - 2), (bx - 24, by - 2)],
-                 CORAL)
-    cv.thick_line(bx, by - 60, bx, by, 3, CLIFF)
-    # reflection
-    cv.ellipse_alpha(bx, by + 26, 40, 5, GOLD_LIGHT, 0.35)
+    # --- sailboats on the sea (the promise of a stay)
+    def boat(bx, by, s):
+        cv.fill_poly([(bx - 34 * s, by), (bx + 34 * s, by),
+                      (bx + 22 * s, by + 16 * s),
+                      (bx - 22 * s, by + 16 * s)], CLIFF)
+        cv.fill_poly([(bx, by - 58 * s), (bx, by - 2),
+                      (bx + 30 * s, by - 2)], CREAM)
+        cv.fill_poly([(bx - 2, by - 46 * s), (bx - 2, by - 2),
+                      (bx - 24 * s, by - 2)], CORAL)
+        cv.thick_line(bx, by - 60 * s, bx, by, 3, CLIFF)
+        # reflection
+        cv.ellipse_alpha(bx, int(by + 26 * s), int(40 * s), 5,
+                         GOLD_LIGHT, 0.35)
 
-    # --- name: VELMARA, big, top centre, from the real-type atlas
+    boat(690, 812, 1.0)
+    boat(892, 906, 0.62)
+    boat(566, 948, 0.45)
+
+    # --- name: THALVARA, big, top centre, from the real-type atlas
     here = os.path.dirname(os.path.abspath(__file__))
     tw, th = blit_word(cv, os.path.join(here, "atlas.png"),
                        os.path.join(here, "atlas.json"),
